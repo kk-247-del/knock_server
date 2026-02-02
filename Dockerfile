@@ -1,13 +1,18 @@
-# Minimal Node.js image
-FROM node:18-alpine
+# Use lightweight Node image
+FROM node:18-slim
 
-WORKDIR /app
+# Create app directory
+WORKDIR /usr/src/app
 
-COPY package.json ./
+# Install dependencies
+COPY package*.json ./
 RUN npm install --production
 
-COPY server.js ./
+# Bundle app source
+COPY . .
 
-EXPOSE 10000
+# Presence Registry Port
+EXPOSE 3000
 
-CMD ["node", "server.js"]
+# Start the engine
+CMD [ "node", "index.js" ]
