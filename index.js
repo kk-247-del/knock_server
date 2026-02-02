@@ -1,39 +1,32 @@
- const express = require('express');
+const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
 
-// --- 1. HEALTH CHECK ---
-// Visit your URL in a browser. If you see "READY", the server is alive.
 app.get('/', (req, res) => {
     res.status(200).send("SIGNAL_PLANE_ACTIVE");
 });
 
 const server = http.createServer(app);
 
-// --- 2. SOCKET CONFIGURATION ---
 const io = new Server(server, {
+    pingTimeout: 60000, // Handle long-lived mobile/web connections
     cors: {
-        origin: "*", // Required for Flutter Web
+        origin: "*", 
         methods: ["GET", "POST"]
     }
 });
 
-/**
- * THE GLOBAL REGISTRY
- * Maps Address (e.g., 'ABC123') to { socketId, name, address }
- */
 const presenceRegistry = new Map();
 
 io.on('connection', (socket) => {
-    console.log(`📡 New Signal: ${socket.id}`);
+    console.log(`📡 New Connection: ${socket.id}`);
 
-    // --- 3. REGISTER IDENTITY ---
+    // --- IDENTITY ---
     socket.on('register_presence', (data) => {
         const { address, name } = data;
         if (!address || !name) return;
-
         const normalizedAddress = address.toUpperCase();
         
         presenceRegistry.set(normalizedAddress, {
@@ -41,38 +34,55 @@ io.on('connection', (socket) => {
             name: name,
             address: normalizedAddress
         });
-
         console.log(`📝 Registered: ${name} @ ${normalizedAddress}`);
     });
 
-    // --- 4. GLOBAL LOOKUP ---
+    // --- ADDRESS LOOKUP ---
     socket.on('lookup_address', (query, callback) => {
-        console.log(`🔍 Searching for: ${query}`);
-        const normalizedQuery = query.toUpperCase();
-        const entry = presenceRegistry.get(normalizedQuery);
+        const entry = presenceRegistry.get(query.toUpperCase());
+        entry ? callback({ found: true, name: entry.name }) : callback({ found: false });
+    });
 
-        if (entry) {
-            callback({ found: true, name: entry.name, address: entry.address });
-        } else {
-            callback({ found: false });
+    // --- THE "KNOCK" (Proposals) ---
+    socket.on('send_proposal', (data) => {
+        const target = presenceRegistry.get(data.toAddress.toUpperCase());
+        if (target) {
+            io.to(target.socketId).emit('incoming_proposal', {
+                id: `KNK-${Date.now()}`,
+                fromName: data.fromName,
+                fromAddress: data.fromAddress,
+                proposedTime: data.proposedTime
+            });
+            console.log(`🚪 Knock: ${data.fromName} -> ${data.toAddress}`);
         }
     });
 
-    // --- 5. DISCONNECT CLEANUP ---
+    socket.on('respond_to_proposal', (data) => {
+        // Logic to notify the sender if accepted/rejected
+        // For 'accept', you'd typically emit 'proposal_accepted' back
+    });
+
+    // --- THE SIGNAL RELAY (Live Text / Reveal Frames) ---
+    // Fixes: Why your Moment Surface isn't updating
+    socket.on('live_signal', (payload) => {
+        // Broadcast the signal to all other users (simplest for 1-on-1 moments)
+        // In a strictly 1-on-1 app, you'd target a specific socketId here.
+        socket.broadcast.emit('live_signal', payload);
+    });
+
+    // --- DISCONNECT ---
     socket.on('disconnect', () => {
         for (let [address, user] of presenceRegistry.entries()) {
             if (user.socketId === socket.id) {
                 presenceRegistry.delete(address);
-                console.log(`🌑 Offline: ${user.name} @ ${address}`);
+                console.log(`🌑 Offline: ${address}`);
                 break;
             }
         }
     });
 });
 
-// --- 6. START SERVER ---
 const PORT = process.env.PORT || 3000;
-// Note: Binding to "0.0.0.0" is critical for Railway/Cloud deployments
 server.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Control Plane running on port ${PORT}`);
 });
