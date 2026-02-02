@@ -1,16 +1,12 @@
 {
-  "name": "presence-knock-relay",
+  "name": "presence-registry-server",
   "version": "1.0.0",
-  "description": "Ephemeral Presence Knock relay server",
-  "type": "module",
-  "main": "server.js",
+  "description": "Signaling and Proposal Server for Presence",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "ws": "^8.15.1"
-  },
-  "engines": {
-    "node": ">=18"
+    "socket.io": "^4.7.2"
   }
 }
